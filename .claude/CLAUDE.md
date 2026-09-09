@@ -131,6 +131,8 @@ Examples: `feat: add search endpoint with keyword and filter support`, `docs: ad
 
 Scope is optional but useful here given the two-sided stack: `feat(backend): ...`, `feat(frontend): ...`.
 
+Do not append `Co-Authored-By: Claude ...` or `Claude-Session: ...` trailers (or any other AI-attribution footer) to commit messages — commits should contain only the Conventional Commits summary/body described above.
+
 ## Workflow notes for Claude Code
 
 - Prepare/refine plans in `.claude/plans/*.md` before writing code; wait for explicit approval.
