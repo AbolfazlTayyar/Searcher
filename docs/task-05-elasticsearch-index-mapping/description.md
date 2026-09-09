@@ -1,0 +1,1 @@
+Task 5 — Elasticsearch index mapping: Add an ES index mapping definition for linkedin_profiles per the "Elasticsearch conventions" section of CLAUDE.md — text fields with keyword sub-fields for name/summary/skills, keyword fields for job_title and skill filtering. Put this in a dedicated module the ingestion script can import (e.g. ingest/mapping.py).
