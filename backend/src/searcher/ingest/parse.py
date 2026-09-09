@@ -38,9 +38,38 @@ NESTED_FIELDS = frozenset(
     }
 )
 
+# Expected Python type for each nested field once parsed, checked against
+# the literal `ast.literal_eval` actually produced. A handful of rows have
+# unescaped quotes that shift fields without changing the row's overall
+# column count (so the header-vs-row length check in `parse_profiles`
+# doesn't catch them) -- e.g. an address `dict` lands in `skills`, which
+# Elasticsearch's mapping expects as a list of strings. Fields not listed
+# here (`emails`, `phone_numbers`, `profiles`) aren't indexed/searched, so
+# their shape is never validated.
+_EXPECTED_NESTED_TYPE: dict[str, type] = {
+    "skills": list,
+    "interests": list,
+    "certifications": list,
+    "languages": list,
+    "experience": list,
+    "education": list,
+}
+
 # A single cleaned profile record: column name -> scalar value, parsed
 # nested structure, or None if the field was absent/blank in the source row.
 ProfileRecord = dict[str, Any]
+
+# Element type expected inside each `list`-typed nested field above.
+# `certifications`/`languages` are lists of structured records (e.g.
+# {"name": "english", "proficiency": None}), not plain strings.
+_EXPECTED_LIST_ELEMENT_TYPE: dict[str, type] = {
+    "skills": str,
+    "interests": str,
+    "certifications": dict,
+    "languages": dict,
+    "experience": dict,
+    "education": dict,
+}
 
 
 def _configure_file_logging() -> None:
@@ -67,14 +96,17 @@ def _clean_scalar(raw_value: str) -> str | None:
 def _parse_nested(field_name: str, raw_value: str, row_index: int) -> Any:
     """Parse a Python-literal-repr field (e.g. "['a', 'b']") via `ast.literal_eval`.
 
-    Falls back to None on a blank value or a literal that fails to parse --
-    the row itself is still usable, just without that one field.
+    Falls back to None on a blank value, a literal that fails to parse, or a
+    literal whose type doesn't match what this field should hold (a sign
+    that upstream quote-shifting landed a different column's data here) --
+    in every case the row itself is still usable, just without that one
+    field, rather than indexing it under the wrong shape.
     """
     stripped = raw_value.strip()
     if not stripped:
         return None
     try:
-        return ast.literal_eval(stripped)
+        value = ast.literal_eval(stripped)
     except (ValueError, SyntaxError) as exc:
         logger.warning(
             "Row %d: could not parse nested field %r (%s); treating as absent",
@@ -83,6 +115,29 @@ def _parse_nested(field_name: str, raw_value: str, row_index: int) -> Any:
             exc,
         )
         return None
+
+    expected_type = _EXPECTED_NESTED_TYPE.get(field_name)
+    if expected_type is not None and not isinstance(value, expected_type):
+        logger.warning(
+            "Row %d: nested field %r parsed as %s, expected %s; treating as absent",
+            row_index,
+            field_name,
+            type(value).__name__,
+            expected_type.__name__,
+        )
+        return None
+
+    expected_element_type = _EXPECTED_LIST_ELEMENT_TYPE.get(field_name)
+    if expected_element_type is not None and isinstance(value, list):
+        if not all(isinstance(element, expected_element_type) for element in value):
+            logger.warning(
+                "Row %d: nested field %r has elements of the wrong type; treating as absent",
+                row_index,
+                field_name,
+            )
+            return None
+
+    return value
 
 
 def _build_record(header: list[str], row: list[str], row_index: int) -> ProfileRecord:

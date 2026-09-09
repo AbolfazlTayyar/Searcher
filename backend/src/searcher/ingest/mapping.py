@@ -30,6 +30,14 @@ _TEXT_WITH_KEYWORD = {
 }
 
 PROFILE_INDEX_MAPPING: dict[str, Any] = {
+    # Every source column not declared below (e.g. `job_last_updated`,
+    # `linkedin_connections`) still gets indexed via dynamic mapping, but
+    # with date/numeric auto-detection off: the dataset's column-mismatch
+    # rows can leave a stray value (e.g. "united states") in a field ES
+    # would otherwise guess is a date from an earlier, well-formed row,
+    # which then rejects every later document as a parse error.
+    "date_detection": False,
+    "numeric_detection": False,
     "properties": {
         # Free-text search fields (multi_match target), each with a
         # `.keyword` sub-field for exact-match filtering or sorting.
@@ -78,10 +86,33 @@ PROFILE_INDEX_MAPPING: dict[str, Any] = {
                 "end_date": _KEYWORD,
             },
         },
-        "certifications": _KEYWORD,
-        "languages": _KEYWORD,
+        # Structured records, not plain strings -- {"name": ..., "proficiency": ...}
+        # and {"organization": ..., "name": ..., "start_date": ..., "end_date": ...}.
+        "certifications": {
+            "properties": {
+                "organization": _KEYWORD,
+                "name": _TEXT_WITH_KEYWORD,
+                "start_date": _KEYWORD,
+                "end_date": _KEYWORD,
+            }
+        },
+        "languages": {
+            "properties": {
+                "name": _KEYWORD,
+                "proficiency": _KEYWORD,
+            }
+        },
         "interests": _KEYWORD,
-    }
+        # Not used by search or filtering, and shape-inconsistent across rows
+        # (some rows hold structured dicts, others plain strings -- an
+        # artifact of the source data's column-shift issue -- so ES's own
+        # type inference would reject whichever shape it didn't see first).
+        # `enabled: false` stores the raw value for retrieval without
+        # attempting to parse or index it.
+        "emails": {"type": "object", "enabled": False},
+        "phone_numbers": {"type": "object", "enabled": False},
+        "profiles": {"type": "object", "enabled": False},
+    },
 }
 
 # Single-node dev setup: no replicas needed, one shard is plenty for ~336 docs.
