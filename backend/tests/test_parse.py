@@ -1,0 +1,45 @@
+from pathlib import Path
+
+from searcher.ingest.parse import parse_profiles
+
+_HEADER = "name,job_title,skills\n"
+
+
+def _write_csv(tmp_path: Path, body: str) -> Path:
+    csv_path = tmp_path / "profiles.csv"
+    csv_path.write_text(_HEADER + body, encoding="utf-8")
+    return csv_path
+
+
+def test_parses_clean_row_including_nested_field(tmp_path: Path) -> None:
+    csv_path = _write_csv(tmp_path, "alice,engineer,\"['python', 'go']\"\n")
+
+    records = parse_profiles(csv_path)
+
+    assert records == [{"name": "alice", "job_title": "engineer", "skills": ["python", "go"]}]
+
+
+def test_empty_field_is_treated_as_absent_not_error(tmp_path: Path) -> None:
+    csv_path = _write_csv(tmp_path, "bob,,[]\n")
+
+    records = parse_profiles(csv_path)
+
+    assert records == [{"name": "bob", "job_title": None, "skills": []}]
+
+
+def test_row_with_wrong_field_count_is_skipped(tmp_path: Path) -> None:
+    body = "alice,engineer,\"['python']\"\ncarol,manager,x,y\ndave,analyst,[]\n"
+    csv_path = _write_csv(tmp_path, body)
+
+    records = parse_profiles(csv_path)
+
+    names = [record["name"] for record in records]
+    assert names == ["alice", "dave"]
+
+
+def test_unparseable_nested_field_is_absent_but_row_is_kept(tmp_path: Path) -> None:
+    csv_path = _write_csv(tmp_path, "dave,analyst,not-a-literal\n")
+
+    records = parse_profiles(csv_path)
+
+    assert records == [{"name": "dave", "job_title": "analyst", "skills": None}]
