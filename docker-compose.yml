@@ -1,0 +1,40 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: searcher-elasticsearch
+    environment:
+      # Single-node dev cluster: no peer discovery, no other nodes to form a quorum with.
+      - discovery.type=single-node
+      # Security (TLS + auth) is disabled for local dev convenience only.
+      # PRODUCTION: never disable this. Enable xpack.security.enabled (the 8.x default),
+      # set ELASTIC_PASSWORD (or use the auto-generated bootstrap password), configure
+      # TLS for the transport and HTTP layers, and put ES behind a network boundary
+      # (VPC/firewall) rather than exposing 9200 directly.
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      # Dev-friendly heap size. PRODUCTION: size this explicitly to ~50% of available
+      # RAM (not more than ~31-32GB to stay under compressed-oops), and pin request/limit
+      # memory in whatever orchestrator you deploy with so the JVM heap isn't guessing.
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      # PRODUCTION: a single node is a single point of failure. Run a multi-node
+      # cluster (3+ master-eligible nodes) with dedicated data/master roles, and set
+      # discovery.seed_hosts / cluster.initial_master_nodes accordingly instead of
+      # discovery.type=single-node.
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      # Named volume so indexed data survives container restarts/recreation.
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  es_data:
+    driver: local
