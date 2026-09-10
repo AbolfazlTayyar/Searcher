@@ -1,0 +1,1 @@
+Task 14 — ResultsList and App wiring: Implement ResultsList.tsx rendering the profile results with explicit loading, error, and empty states. Wire App.tsx to hold the current keyword and filter state, pass it to the useSearch hook from Task 12, and render SearchBar, Filters, and ResultsList together as a working page.
