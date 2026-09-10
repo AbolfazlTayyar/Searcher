@@ -133,6 +133,8 @@ Scope is optional but useful here given the two-sided stack: `feat(backend): ...
 
 Do not append `Co-Authored-By: Claude ...` or `Claude-Session: ...` trailers (or any other AI-attribution footer) to commit messages — commits should contain only the Conventional Commits summary/body described above.
 
+Never run `git commit` (or `git push`) unless explicitly instructed to do so in that session. Implement and verify a task, then stop and wait — do not commit automatically after finishing a task, even if the checkpoint passes. Only commit when the user's message explicitly says to commit.
+
 ## Workflow notes for Claude Code
 
 - Prepare/refine plans in `.claude/plans/*.md` before writing code; wait for explicit approval.
