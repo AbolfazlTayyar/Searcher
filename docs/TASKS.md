@@ -150,17 +150,53 @@ Per CLAUDE.md's "Documentation conventions," every task below gets a `docs/task-
 
 ---
 
-## Phase 6 — Documentation & final pass
+## Phase 6 — Polish & containerization
 
-### Task 16 — README
-**Do:** How to run, architecture explanation (including the ES-only, no-separate-DB decision and why), search/filter logic explanation, note on data quality handling.
+### Task 16 — Modern, distinctive UI pass
+**Do:** Replace default/scaffold styling with an intentional design — real color palette, type scale, and a layout suited to a search tool — per the "UI/design conventions" section of CLAUDE.md. No functional changes.
 
 **Prompt:**
-> Write `README.md` at repo root covering: how to run the project end-to-end (docker compose, ingestion, backend, frontend commands), a general architecture explanation (FastAPI + Elasticsearch, no separate database and why that's sufficient here), an explanation of the search and filter logic (multi_match + bool/filter query), and a short note on the dataset's data quality issues and how ingestion handles them.
+> Redesign the frontend's visual styling per the "UI/design conventions" section of CLAUDE.md: pick a deliberate color palette and typography, and a layout suited specifically to a search tool (not a generic centered card grid or default Tailwind/shadcn look). This is a styling pass only — don't change any component logic, data flow, or the API layer. All existing functionality (search, filters, loading/error/empty states) must keep working exactly as before.
+
+**Checkpoint:** Visually compare against an unstyled scaffold — the app should look like a deliberate design choice, not a default template. Re-run the full manual flow from Task 14's checkpoint — nothing functional broke.
+
+### Task 17 — Comment cleanup pass
+**Do:** Audit comments across backend and frontend per the "Comment density" section of CLAUDE.md — remove noise, keep only comments that explain non-obvious why.
+
+**Prompt:**
+> Go through every file in backend/src and frontend/src and clean up comments per the "Comment density" section of CLAUDE.md: remove any comment that just restates what the next line of code already says, and keep only comments explaining non-obvious reasoning (e.g. the CSV malformation handling, any tradeoffs). Do not change any logic — comments only.
+
+**Checkpoint:** Spot-check a handful of files — remaining comments all pass the "why, not what" test. No behavior changed (existing tests from Tasks 10 and 15 still pass).
+
+### Task 18 — SOLID / readability refactor pass
+**Do:** Review backend modules and frontend components against the SOLID-related bullet in CLAUDE.md's Backend conventions — single responsibility, clear naming, small functions — and refactor where needed.
+
+**Prompt:**
+> Review backend/src/searcher and frontend/src against the SOLID/readability conventions in CLAUDE.md. Refactor anything that violates single responsibility (a function or module doing more than one job), has unclear naming, or is harder to follow than it needs to be. Keep behavior identical — this is a structural/readability refactor, not a feature change.
+
+**Checkpoint:** All existing backend tests (uv run pytest) and frontend tests (npm run test) still pass after the refactor. Manually skim each touched file — each has one clear responsibility and reads easily top to bottom.
+
+### Task 19 — Full containerization
+**Do:** Add backend/Dockerfile and frontend/Dockerfile (both multi-stage), update docker-compose.yml to run Elasticsearch + backend + frontend together, and wire the ingestion step per the "Infra & containerization" section of CLAUDE.md, so the whole app runs via Docker with no local uv/npm commands required.
+
+**Prompt:**
+> Implement the "Infra & containerization" section of CLAUDE.md: create a multi-stage backend/Dockerfile (uv-based) and a multi-stage frontend/Dockerfile (Vite build, served via nginx), update docker-compose.yml to run all three services together with correct env vars (ES host as the service name, not localhost) and depends_on/healthchecks so the backend waits for Elasticsearch to be ready. Set up the ingestion step as either an automated one-off compose service or a clearly documented single command. Update the "How to run" section of CLAUDE.md and the README if it already exists.
+
+**Checkpoint:** From a clean state (docker compose down -v), running docker compose up --build -d plus the documented ingestion command brings up the entire app with no local Python/Node tooling used — frontend reachable in the browser, search and filters working end-to-end against the containerized backend and ES.
+
+---
+
+## Phase 7 — Documentation & final pass
+
+### Task 20 — README
+**Do:** How to run (Docker-based), architecture explanation (including the ES-only, no-separate-DB decision and why), search/filter logic explanation, note on data quality handling.
+
+**Prompt:**
+> Write `README.md` at repo root covering: how to run the project end-to-end via Docker (per the updated "How to run" section of CLAUDE.md), a general architecture explanation (FastAPI + Elasticsearch, no separate database and why that's sufficient here), an explanation of the search and filter logic (multi_match + bool/filter query), and a short note on the dataset's data quality issues and how ingestion handles them.
 
 **Checkpoint:** Follow the README's own run instructions on a clean checkout (or mentally step through them) — confirm nothing is missing or out of order.
 
-### Task 17 — Final review against the spec
+### Task 21 — Final review against the spec
 **Do:** Re-check the implementation against every bullet in `Searcher.md`.
 
 **Prompt:**
