@@ -23,6 +23,7 @@ Searcher/
 ├── docker-compose.yml
 ├── README.md
 ├── backend/
+│   ├── Dockerfile
 │   ├── pyproject.toml
 │   ├── uv.lock
 │   ├── src/
@@ -38,6 +39,7 @@ Searcher/
 │   │           └── search.py
 │   └── tests/
 ├── frontend/
+│   ├── Dockerfile
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
@@ -87,13 +89,14 @@ The source CSV has real data quality issues that must be handled explicitly, not
 - **Testing**: `pytest` + `httpx.AsyncClient` for endpoint tests; a fixture that points at a test ES index (or mocks the ES client) rather than hitting the real index in tests. At minimum, cover: keyword search, each filter independently, both filters combined, and the empty-results case.
 - **Linting/formatting**: `ruff` for both lint and format (replaces flake8 + black + isort in one tool), `mypy` for type checking. Configure both in `pyproject.toml`.
 - Docstrings on public functions in `search_service.py` and `ingest/` explaining *why*, not just restating the signature — these are the parts most worth explaining in the README/interview.
+- Follow SOLID principles: each module/class has one clear responsibility (e.g. `search_service.py` builds queries, routes handle HTTP only, `ingest/` owns parsing/loading); depend on abstractions at boundaries (the ES client is injected, not hardcoded); keep functions small and named for what they do. Prioritize readability — a reviewer should follow the logic without needing to hold much in their head at once.
 
 ## Frontend conventions
 
 - Functional components + hooks only.
 - TypeScript interfaces for API responses, kept in sync with the backend Pydantic models (mirror field names/types) — define them once in `src/api/types.ts`, imported everywhere rather than redeclared per-component.
 - Fetch/axios calls isolated in `src/api/`, not inline in components.
-- Minimal styling — this project is graded on logic, not visuals. Don't over-invest here.
+- Styling should follow the "UI/design conventions" section below — a deliberate, modern look, not over-invested but not a default scaffold either.
 - **Data fetching via TanStack Query (`@tanstack/react-query`)** rather than raw `useEffect` + `useState` fetch chains — gives you loading/error/caching state for free and keeps components declarative. Debounce the search input (e.g. `use-debounce`) before it triggers a query, so every keystroke doesn't fire a request.
 - **Explicit loading, error, and empty states** in `ResultsList.tsx` — no silent blank screens while fetching or on zero results.
 - **`tsconfig.json` in strict mode** (`"strict": true`); no `any` — if a shape is genuinely unknown, model it with a proper union/interface.
@@ -102,15 +105,30 @@ The source CSV has real data quality issues that must be handled explicitly, not
 - **Environment-based API base URL** via Vite's `import.meta.env.VITE_API_BASE_URL` (with a `.env.example`), not a hardcoded `localhost:8000` string in `src/api/`.
 - **Testing**: Vitest + React Testing Library for at least the `SearchBar` and `Filters` components (user types → correct query fired) and `ResultsList` (renders results / empty state correctly) — doesn't need to be exhaustive, but the search flow itself should have coverage.
 
+## Infra & containerization
+
+The full app — Elasticsearch, backend, and frontend — runs via a single `docker-compose.yml`; no local `uv`/`npm` commands should be required to run the project.
+
+- `backend/Dockerfile`: multi-stage build using `uv` (install deps in a builder stage, copy the synced venv into a slim runtime stage). Runs `uvicorn` as the container entrypoint.
+- `frontend/Dockerfile`: multi-stage build — `npm run build` in a Node build stage, serve the static output from a lightweight server (e.g. `nginx`) in the final stage. Not `npm run dev` in production/Docker.
+- `docker-compose.yml` wires all three services together with proper `depends_on`/healthchecks (backend waits for ES to be ready), a shared network, and env vars (`ES_HOST` pointing at the ES service name, not `localhost`, `VITE_API_BASE_URL` pointing at the backend service).
+- Ingestion (`ingest.py`) runs as a one-off job — either a separate compose service with `restart: "no"` that runs once and exits, or documented as a single `docker compose run backend uv run python -m searcher.ingest.ingest` command. Either way, `docker compose up --build` alone (plus that one ingestion command, if not automated) should bring the whole app up with no other tooling installed locally.
+
+## UI/design conventions
+
+The UI should look like a deliberate, modern design choice — not the default look of an unstyled Tailwind/shadcn scaffold (generic centered card grid, purple-to-blue gradient, default rounded-full buttons, stock sans-serif). Make an actual design decision: a considered color palette (not defaults), an intentional type scale/pairing, and a layout that fits a search tool specifically (e.g. a prominent search bar, filters as a visible sidebar or inline chips rather than a generic form). Keep it simple to implement — this doesn't need to be elaborate, just not visibly templated.
+
+## Comment density
+
+Prefer self-explanatory code (clear names, small functions) over comments explaining *what* code does. Remove any comment that merely restates the line below it. Keep comments only where they explain *why* — a non-obvious tradeoff, a workaround for a specific data quirk (e.g. the CSV malformation handling), or a decision that isn't evident from the code itself. Comment density should stay low across the project — code should read as more of the file than comments.
+
 ## How to run
 
 ```bash
-docker compose up -d                      # start Elasticsearch
-cd backend && uv sync                     # install deps
-uv run python -m searcher.ingest.ingest   # one-time: index the dataset
-uv run uvicorn searcher.main:app --reload # start API
-cd frontend && npm install && npm run dev # start frontend
+docker compose up --build -d              # starts Elasticsearch, backend, frontend
+docker compose run --rm backend uv run python -m searcher.ingest.ingest  # one-time: index the dataset
 ```
+(Local-only commands, e.g. for running tests outside Docker, are documented separately in each service's own notes — not required for running the app itself.)
 
 ## Documentation conventions
 
