@@ -26,6 +26,7 @@ export default function SearchBar({ onQueryChange }: SearchBarProps) {
   return (
     <input
       type="text"
+      className="search-bar"
       value={value}
       onChange={handleChange}
       placeholder="Search by name, headline, skills..."

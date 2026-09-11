@@ -13,8 +13,11 @@ function App() {
   const { data, isLoading, isError } = useSearch({ q: query, jobTitle, skill });
 
   return (
-    <div>
-      <h1>Searcher</h1>
+    <div className="app">
+      <header className="app__header">
+        <h1 className="app__title">Searcher</h1>
+        <p className="app__subtitle">LinkedIn profile index</p>
+      </header>
       <SearchBar onQueryChange={setQuery} />
       <Filters jobTitle={jobTitle} skill={skill} onJobTitleChange={setJobTitle} onSkillChange={setSkill} />
       <ResultsList data={data} isLoading={isLoading} isError={isError} />
