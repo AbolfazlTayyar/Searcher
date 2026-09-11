@@ -1,13 +1,24 @@
 """Row parsing and validation for the LinkedIn profile dataset.
 
 The source file (`data/300_user_linkedin.txt`) is CSV in name only: nested
-list/dict fields are Python-literal reprs rather than JSON, and roughly 16%
-of rows carry unescaped quotes in free-text fields (e.g. `summary`) that
-shift every column for the rest of that physical row. Trusting column
-position blindly would silently index garbage under the wrong field names,
-so every row's field count is validated against the header before it is
-used, and anything that doesn't match is skipped and logged rather than
-guessed at.
+list/dict fields are Python-literal reprs rather than JSON, and unescaped
+quotes in free-text fields (e.g. `summary`) shift columns for the rest of
+that physical row. A field-count mismatch against the header catches most
+of that, but not all of it -- some rows lose and gain fields in equal
+measure partway through (one field's quoting absorbs a comma that should
+have started a new column, another field further along splits in two),
+landing on the *same* total column count while every field from the point
+of the shift onward holds the wrong data. That kind of row sails through a
+length check looking clean while `facebook_url` holds an industry name and
+`job_title` holds a birth date.
+
+So beyond the length check, every row is checked against a handful of
+"anchor" fields whose shape is well known regardless of position --
+platform URLs contain their own domain, `gender` is one of a small enum,
+`job_title`/`industry` are never a Python-literal repr or a bare phone
+number -- and a row that fails any of them is treated as shifted and
+skipped in full, the same as a length mismatch, rather than trusting the
+rest of its fields.
 """
 
 from __future__ import annotations
@@ -15,12 +26,60 @@ from __future__ import annotations
 import ast
 import csv
 import logging
+import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from searcher.ingest.logging_setup import LOG_PATH, configure_file_logging
 
 logger = logging.getLogger(__name__)
+
+# Matches a bare phone number (e.g. "+19104675531"): a shifted-column
+# symptom seen where `phone_numbers` content lands in a scalar field like
+# `industry`. Free-text industry/job-title values never look like this.
+_PHONE_LIKE_RE = re.compile(r"^\+?[0-9][0-9\-\s().]{5,}$")
+
+
+def _looks_like_python_literal(value: str) -> bool:
+    """True for a stray `"['a', 'b']"` / `"{...}"` repr landing in a scalar field."""
+    return value.startswith("[") or value.startswith("{")
+
+
+def _is_plausible_free_text(value: str) -> bool:
+    """False if `value` looks like it belongs to a different (structured) column."""
+    return not (_looks_like_python_literal(value) or _PHONE_LIKE_RE.match(value))
+
+
+# Column -> predicate(value) -> True if the value's shape is plausible for
+# that column, checked against the *raw* (stripped) field regardless of
+# whether it's blank (an absent value is always plausible). These are
+# "anchor" fields: cheap to validate and, because column shifts are
+# contiguous, a violation here is strong evidence the rest of the row --
+# including fields the app actually displays and filters on -- is shifted
+# too, so a failure here skips the whole row rather than just this field.
+_ANCHOR_CHECKS: dict[str, Callable[[str], bool]] = {
+    "linkedin_url": lambda v: not v or "linkedin.com" in v,
+    "facebook_url": lambda v: not v or "facebook.com" in v,
+    "twitter_url": lambda v: not v or "twitter.com" in v,
+    "github_url": lambda v: not v or "github.com" in v,
+    "gender": lambda v: not v or v in {"male", "female"},
+    "job_title": lambda v: not v or _is_plausible_free_text(v),
+    "industry": lambda v: not v or _is_plausible_free_text(v),
+}
+
+
+def _find_anchor_violation(header_index: dict[str, int], row: list[str]) -> tuple[str, str] | None:
+    """Return `(field, value)` for the first anchor field whose value looks implausible."""
+    for field, check in _ANCHOR_CHECKS.items():
+        column_index = header_index.get(field)
+        if column_index is None:
+            continue
+        value = row[column_index].strip()
+        if not check(value):
+            return field, value
+    return None
+
 
 # Columns whose raw value is a Python-literal repr of a list/dict, not JSON.
 NESTED_FIELDS = frozenset(
@@ -137,21 +196,29 @@ def _build_record(header: list[str], row: list[str], row_index: int) -> ProfileR
 def parse_profiles(path: str | Path) -> list[ProfileRecord]:
     """Parse the LinkedIn dataset CSV into clean, structured profile records.
 
-    Each row's field count is checked against the header before any column
-    is trusted; a mismatch means unescaped quotes upstream have shifted that
-    row's columns, so the row is skipped and logged (index + reason) to
-    `backend/ingest.log` rather than indexed under the wrong field names.
+    Three checks gate whether a row is trusted, in order: its field count
+    must match the header (catches quote-shifts that add/remove columns),
+    it must not be a byte-for-byte repeat of an earlier row (the source
+    data contains a number of exact duplicate rows -- same `linkedin_id`,
+    same everything -- which would otherwise double-index that profile),
+    and none of its `_ANCHOR_CHECKS` fields may look implausible (catches
+    quote-shifts that net out to the *same* column count, see module
+    docstring). Anything that fails is skipped and logged (index + reason)
+    to `backend/ingest.log` rather than indexed under the wrong field
+    names.
     """
     configure_file_logging(logger)
 
     csv_path = Path(path)
     records: list[ProfileRecord] = []
+    seen_rows: set[tuple[str, ...]] = set()
     skipped = 0
 
     with csv_path.open(newline="", encoding="utf-8") as f:
         reader = csv.reader(f)
         header = next(reader)
         expected_field_count = len(header)
+        header_index = {name: i for i, name in enumerate(header)}
 
         for row_index, row in enumerate(reader, start=2):
             if len(row) != expected_field_count:
@@ -163,6 +230,27 @@ def parse_profiles(path: str | Path) -> list[ProfileRecord]:
                     len(row),
                 )
                 continue
+
+            row_key = tuple(row)
+            if row_key in seen_rows:
+                skipped += 1
+                logger.warning("Skipping row %d: exact duplicate of an earlier row", row_index)
+                continue
+            seen_rows.add(row_key)
+
+            violation = _find_anchor_violation(header_index, row)
+            if violation is not None:
+                field, value = violation
+                skipped += 1
+                logger.warning(
+                    "Skipping row %d: field %r looks shifted (value %r); "
+                    "treating whole row as misaligned",
+                    row_index,
+                    field,
+                    value,
+                )
+                continue
+
             records.append(_build_record(header, row, row_index))
 
     logger.info(

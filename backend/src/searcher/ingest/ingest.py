@@ -60,10 +60,12 @@ def _to_bulk_actions(records: list[ProfileRecord], index_name: str) -> Iterator[
     """Yield bulk-API index actions, one per clean record.
 
     No explicit `_id` -- the index is dropped and recreated on every run
-    (see `_recreate_index`), so idempotency doesn't depend on a stable id,
-    and a handful of source rows share a `linkedin_id` value (likely
-    genuine duplicate profiles), so keying on it would silently collapse
-    distinct clean records into one document.
+    (see `_recreate_index`), so idempotency doesn't depend on a stable id.
+    `parse.py` already drops byte-for-byte duplicate rows, but a shifted
+    row that happens to retain its original `linkedin_id` could still
+    collide with the clean row for that same profile; keying on it would
+    let one silently overwrite the other instead of both being indexed
+    (skipping is `parse.py`'s job, not this one's).
     """
     for record in records:
         yield {"_index": index_name, "_source": record}
