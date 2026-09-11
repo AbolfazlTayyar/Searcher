@@ -44,7 +44,7 @@ services:
       # compose network by service name.
       - ES_HOST=http://elasticsearch:9200
       - ES_INDEX_NAME=linkedin_profiles
-      - CORS_ORIGINS=["http://localhost:5173"]
+      - CORS_ORIGINS=["http://localhost:4173"]
     volumes:
       # Read-only: the dataset is write-once, indexed via the one-off
       # `docker compose run --rm backend python -m searcher.ingest.ingest` command.
@@ -69,7 +69,7 @@ services:
         VITE_API_BASE_URL: http://localhost:8000
     container_name: searcher-frontend
     ports:
-      - "5173:80"
+      - "4173:80"
     depends_on:
       - backend
 

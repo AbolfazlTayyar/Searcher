@@ -129,7 +129,7 @@ docker compose up --build -d                                        # starts Ela
 docker compose run --rm backend python -m searcher.ingest.ingest     # one-time: index the dataset
 ```
 
-Frontend: http://localhost:5173 · Backend API: http://localhost:8000 · Elasticsearch: http://localhost:9200
+Frontend: http://localhost:4173 · Backend API: http://localhost:8000 · Elasticsearch: http://localhost:9200
 
 Re-run the ingestion command any time to refresh the index (it's a full drop-and-recreate, safe to repeat — see `ingest.py`'s docstring). No local `uv`/`npm` installation is required; both Dockerfiles are self-contained multi-stage builds.
 

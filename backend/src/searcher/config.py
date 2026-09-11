@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     ES_HOST: str = "http://localhost:9200"
     ES_INDEX_NAME: str = "linkedin_profiles"
-    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: list[str] = ["http://localhost:4173"]
 
 
 @lru_cache

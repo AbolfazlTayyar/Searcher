@@ -9,7 +9,7 @@ docker compose up --build -d                                        # اجرای
 docker compose run --rm backend python -m searcher.ingest.ingest     # یک‌بار: ایندکس‌کردن دیتاست
 ```
 
-- فرانت‌اند: http://localhost:5173
+- فرانت‌اند: http://localhost:4173
 - API بک‌اند: http://localhost:8000
 - Elasticsearch: http://localhost:9200
 
