@@ -48,11 +48,18 @@ def _build_query(q: str | None, job_title: str | None, skill: str | None) -> dic
     else:
         must.append({"match_all": {}})
 
+    # `case_insensitive` keeps the filter an exact match on the whole field
+    # value (unlike a `match`, which would tokenize and allow partial hits)
+    # while not requiring callers to match the indexed casing -- the `q`
+    # free-text search is already case-insensitive via the standard
+    # analyzer, so filters should behave the same way.
     filters: list[dict[str, Any]] = []
     if job_title:
-        filters.append({"term": {"job_title.keyword": job_title}})
+        filters.append(
+            {"term": {"job_title.keyword": {"value": job_title, "case_insensitive": True}}}
+        )
     if skill:
-        filters.append({"term": {"skills.keyword": skill}})
+        filters.append({"term": {"skills.keyword": {"value": skill, "case_insensitive": True}}})
 
     return {"bool": {"must": must, "filter": filters}}
 
