@@ -246,3 +246,11 @@ Per CLAUDE.md's "Documentation conventions," every task below gets a `docs/task-
 > [after the fix was verified] update CLAUDE.md's malformed-row percentage to match.
 
 **Checkpoint:** All 7 QA scenarios pass against the rebuilt backend image and re-ingested index; direct Elasticsearch queries confirm zero remaining phone-number-in-`industry` or Python-literal-in-`job_title` leaks; `uv run pytest`/`ruff`/`mypy` all clean; `.claude/CLAUDE.md`'s data handling section reflects the real, measured skip breakdown (column-count mismatch / same-length shift / exact duplicate) instead of the original column-count-only estimate.
+
+### Task 25 — Case-insensitive filter search fix
+**Do:** Verify keyword search (`q`) and both filters (`job_title`, `skill`) behave the same regardless of input casing. `q` already worked (standard analyzer lowercases both sides); `job_title`/`skill` filters didn't (`term` queries against unanalyzed `.keyword` sub-fields require exact-case matches). Fix the filters in `search_service.py` and add regression tests.
+
+**Prompt:**
+> test the search based on case sensibity or insensivity ity should work both ways i think
+
+**Checkpoint:** Live-tested against the running Docker stack: `q=training`/`Training`/`TRAINING` all return identical results (confirms `q` was already case-insensitive). `job_title=recruiting manager` vs `Recruiting Manager` vs `RECRUITING MANAGER` all returned the same match after the fix (previously only the exact-cased value matched); non-matching filter values still correctly return zero results. Added `case_insensitive: true` to both `term` filter clauses in `search_service.py`. Added 3 regression tests (`test_keyword_search_is_case_insensitive`, `test_job_title_filter_is_case_insensitive`, `test_skill_filter_is_case_insensitive`) to `backend/tests/test_search.py`; full suite (15 tests), `ruff check`, `ruff format --check`, and `mypy` all pass.
