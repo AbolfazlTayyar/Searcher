@@ -43,3 +43,38 @@ def test_unparseable_nested_field_is_absent_but_row_is_kept(tmp_path: Path) -> N
     records = parse_profiles(csv_path)
 
     assert records == [{"name": "dave", "job_title": "analyst", "skills": None}]
+
+
+def test_row_with_shifted_scalar_field_is_skipped_despite_matching_field_count(
+    tmp_path: Path,
+) -> None:
+    """A quote-shift that nets out to the same column count still corrupts data --
+    e.g. `job_title_levels` content ("['manager']") landing under `job_title`."""
+    body = "alice,engineer,\"['python']\"\ncarol,['manager'],[]\ndave,analyst,[]\n"
+    csv_path = _write_csv(tmp_path, body)
+
+    records = parse_profiles(csv_path)
+
+    names = [record["name"] for record in records]
+    assert names == ["alice", "dave"]
+
+
+def test_row_with_phone_like_scalar_field_is_skipped(tmp_path: Path) -> None:
+    """A phone number landing in a plain-text column (e.g. `industry`) is a
+    tell-tale sign of a shifted row, even when the field count still matches."""
+    body = "alice,engineer,\"['python']\"\ncarol,+19104675531,[]\n"
+    csv_path = _write_csv(tmp_path, body)
+
+    records = parse_profiles(csv_path)
+
+    names = [record["name"] for record in records]
+    assert names == ["alice"]
+
+
+def test_exact_duplicate_row_is_skipped(tmp_path: Path) -> None:
+    body = "alice,engineer,\"['python']\"\nalice,engineer,\"['python']\"\n"
+    csv_path = _write_csv(tmp_path, body)
+
+    records = parse_profiles(csv_path)
+
+    assert len(records) == 1
