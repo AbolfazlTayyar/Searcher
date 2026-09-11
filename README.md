@@ -1,18 +1,49 @@
 # Searcher
 
-Search/filter application over a LinkedIn profile dataset, backed by Elasticsearch.
+اپلیکیشن جست‌وجو/فیلتر روی حدود ۳۳۶ پروفایل لینکدین. بک‌اند FastAPI، پایگاه‌داده Elasticsearch، فرانت‌اند React + TypeScript.
 
-## How to run
+## نحوه اجرا
 
 ```bash
-docker compose up --build -d                                        # starts Elasticsearch, backend, frontend
-docker compose run --rm backend python -m searcher.ingest.ingest     # one-time: index the dataset
+docker compose up --build -d                                        # اجرای Elasticsearch، بک‌اند و فرانت‌اند
+docker compose run --rm backend python -m searcher.ingest.ingest     # یک‌بار: ایندکس‌کردن دیتاست
 ```
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
+- فرانت‌اند: http://localhost:5173
+- API بک‌اند: http://localhost:8000
 - Elasticsearch: http://localhost:9200
 
-Re-run the ingestion command any time to refresh the index. No local `uv`/`npm` installation is required.
+دستور ایندکس‌کردن هر بار ایندکس را از نو می‌سازد، پس تکرارش بی‌خطر است. نیازی به نصب محلی `uv`/`npm` نیست. پیکربندی از طریق متغیرهای محیطی است (`.env.example` در ریشهٔ ریپو).
 
-(Architecture, search/filter logic, and data-quality handling are documented in a later pass.)
+## معماری
+
+سه سرویس، متصل‌شده با `docker-compose.yml`:
+
+- **Elasticsearch** — تک‌نود، تنها پایگاه‌داده‌ی پروژه.
+- **بک‌اند FastAPI** — مسیرها (`routes/search.py`) پارامترها را می‌خوانند و به `search_service.py` می‌سپارند که کوئری‌های ES را می‌سازد و از طریق کلاینت async تزریق‌شده اجرا می‌کند.
+- **فرانت‌اند React + TypeScript** — نوار جست‌وجو، فیلترها، و لیست نتایج، با TanStack Query و ورودی دیبانس‌شده.
+
+**چرا پایگاه‌داده‌ی جداگانه نداریم:** دیتاست فقط‌خواندنی و یک‌بارنویس است، پس مسیر نوشتاری تراکنشی‌ای وجود ندارد که به پایگاه‌داده رابطه‌ای نیاز داشته باشد. جست‌وجوی متنی، فیلتر دقیق، و صفحه‌بندی — همه را Elasticsearch به‌طور ذاتی انجام می‌دهد؛ افزودن یک پایگاه‌داده دوم فقط مسئلهٔ هم‌گام‌سازی می‌آورد، نه قابلیت جدید.
+
+## منطق جست‌وجو و فیلتر
+
+`search_service.py` هر درخواست را به یک کوئری `bool` تبدیل می‌کند:
+
+- `q` به `multi_match` در `must` تبدیل می‌شود (روی `full_name^3`، `summary`، `skills`) و در رتبه‌بندی اثر دارد؛ بدون `q`، `must` به `match_all` برمی‌گردد.
+- `job_title` و `skill` به `term` در `filter` تبدیل می‌شوند و روی زیرفیلد `.keyword` تطابق دقیق می‌دهند، بدون اثر بر رتبه‌بندی.
+
+نگاشت ایندکس (`ingest/mapping.py`) صریح تعریف شده تا فیلدهای متنی زیرفیلد `.keyword` برای فیلتر دقیق داشته باشند — چیزی که نگاشت داینامیک درست تنظیم نمی‌کند. صفحه‌بندی آفست‌محور (`from`/`size`) است، چون با حدود ۳۳۶ سند صفحه‌بندی عمیق هیچ‌گاه هزینه‌بر نمی‌شود.
+
+## کیفیت داده
+
+فایل منبع (`data/300_user_linkedin.txt`) فقط در نام CSV است:
+
+1. **فیلدهای تودرتو لیترال پایتون‌اند، نه JSON.** `skills`، `experience`، `education` و مشابه با `ast.literal_eval` پارس می‌شوند؛ اگر نوع پارس‌شده با نوع مورد انتظار فیلد نخواند (نشانهٔ جابه‌جایی ستون‌ها)، فیلد غایب در نظر گرفته می‌شود.
+2. **حدود ۱۶٪ از سطرها** به‌خاطر کوتیشن‌های بدون escape در `summary` تعداد ستون نادرست دارند. `parse_profiles` تعداد فیلد هر سطر را با هدر می‌سنجد و در صورت عدم‌تطابق آن سطر را رد می‌کند. همهٔ ردشدن‌ها با شماره‌سطر و دلیل در `backend/ingest.log` ثبت می‌شوند.
+3. **بسیاری از فیلدها طبیعتاً خالی‌اند** (`job_title` ~۲۸٪، `industry` ~۴۰٪). مقادیر خالی به `None` نگاشت می‌شوند و همهٔ فیلدهای `ProfileResult` اختیاری‌اند.
+
+## تست
+
+بک‌اند: `cd backend && uv run pytest` — پوشش جست‌وجو، فیلترها، و حالت بدون نتیجه.
+فرانت‌اند: `cd frontend && npm test` — پوشش `SearchBar`، `Filters`، `ResultsList`.
+هیچ‌یک برای اجرای خود اپ لازم نیست.
