@@ -223,3 +223,26 @@ Per CLAUDE.md's "Documentation conventions," every task below gets a `docs/task-
 > Running `docker compose up --build -d` fails with `ports are not available: exposing port TCP 0.0.0.0:5173 -> 127.0.0.1:0: listen tcp 0.0.0.0:5173: bind: An attempt was made to access a socket in a way forbidden by its access permissions`. Diagnose the root cause (check `netsh interface ipv4 show excludedportrange protocol=tcp` for a Windows-reserved port range covering 5173), remap the frontend's host-side port in `docker-compose.yml` to a free port, and update every place that documents or configures port 5173 (`README.md`, `.claude/CLAUDE.md`, `.env.example`, backend `CORS_ORIGINS` default) to match. Bring the stack up, run the one-off ingestion command, and verify the frontend loads and the search flow works end-to-end in a browser.
 
 **Checkpoint:** `docker compose up --build -d` starts all three services cleanly; ingestion reports the expected ~283 indexed / ~53 skipped rows; the frontend loads at the new port with default results, and typing a keyword narrows results correctly after the debounce.
+
+---
+
+## Phase 9 — QA & data-integrity fixes
+
+### Task 24 — Browser QA pass and ingestion validation fix
+**Do:** Run a set of manual QA scenarios against the live, running stack via browser automation (malformed-row exclusion, keyword case sensitivity, exact-match job-title/skill filtering, combined keyword+filter intersection, empty-result state, missing-field rendering). Investigate any failures down to root cause in `parse.py`/`ingest.py`, fix the underlying validation gap, and update `CLAUDE.md`'s documented malformed-row statistics to match the corrected, verified behavior.
+
+**Prompt:**
+> test these using claude in chrome:
+> 1. Confirm the malformed rows really got excluded — search `+1`, expect 0 results.
+> 2. Case sensitivity on keyword search — `RECRUITING` vs `recruiting`, expect same count.
+> 3. Job title filter exact vs partial — `manager` vs `recruiting manager`.
+> 4. Multi-word skill filter — `team building` vs `team`.
+> 5. Combined keyword + both filters at once — proper intersection.
+> 6. Genuinely no-match query — empty-state UI renders correctly.
+> 7. Field that's frequently empty — profile with blank industry still renders gracefully.
+>
+> [after the QA pass surfaced real leaks] yes, dig into parse.py and ingest.py to fix it.
+>
+> [after the fix was verified] update CLAUDE.md's malformed-row percentage to match.
+
+**Checkpoint:** All 7 QA scenarios pass against the rebuilt backend image and re-ingested index; direct Elasticsearch queries confirm zero remaining phone-number-in-`industry` or Python-literal-in-`job_title` leaks; `uv run pytest`/`ruff`/`mypy` all clean; `.claude/CLAUDE.md`'s data handling section reflects the real, measured skip breakdown (column-count mismatch / same-length shift / exact duplicate) instead of the original column-count-only estimate.
