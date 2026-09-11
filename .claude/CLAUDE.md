@@ -125,9 +125,14 @@ Prefer self-explanatory code (clear names, small functions) over comments explai
 ## How to run
 
 ```bash
-docker compose up --build -d              # starts Elasticsearch, backend, frontend
-docker compose run --rm backend uv run python -m searcher.ingest.ingest  # one-time: index the dataset
+docker compose up --build -d                                        # starts Elasticsearch, backend, frontend
+docker compose run --rm backend python -m searcher.ingest.ingest     # one-time: index the dataset
 ```
+
+Frontend: http://localhost:5173 · Backend API: http://localhost:8000 · Elasticsearch: http://localhost:9200
+
+Re-run the ingestion command any time to refresh the index (it's a full drop-and-recreate, safe to repeat — see `ingest.py`'s docstring). No local `uv`/`npm` installation is required; both Dockerfiles are self-contained multi-stage builds.
+
 (Local-only commands, e.g. for running tests outside Docker, are documented separately in each service's own notes — not required for running the app itself.)
 
 ## Documentation conventions
