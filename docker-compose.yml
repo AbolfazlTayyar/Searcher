@@ -35,6 +35,44 @@ services:
       timeout: 5s
       retries: 10
 
+  backend:
+    build:
+      context: ./backend
+    container_name: searcher-backend
+    environment:
+      # Service name, not localhost -- containers reach each other over the
+      # compose network by service name.
+      - ES_HOST=http://elasticsearch:9200
+      - ES_INDEX_NAME=linkedin_profiles
+      - CORS_ORIGINS=["http://localhost:5173"]
+    volumes:
+      # Read-only: the dataset is write-once, indexed via the one-off
+      # `docker compose run --rm backend python -m searcher.ingest.ingest` command.
+      - ./data:/app/data:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Browser-reachable URL: the browser talks to the backend via its
+        # published host port, not the compose-internal service name.
+        VITE_API_BASE_URL: http://localhost:8000
+    container_name: searcher-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
 volumes:
   es_data:
     driver: local
