@@ -20,30 +20,13 @@ from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 
 from searcher.config import get_settings
+from searcher.ingest.logging_setup import configure_file_logging
 from searcher.ingest.mapping import PROFILE_INDEX_MAPPING, PROFILE_INDEX_SETTINGS
 from searcher.ingest.parse import ProfileRecord, parse_profiles
 
 logger = logging.getLogger(__name__)
 
-# Same file parse.py logs to, so parse-level and bulk-level skips both land
-# in one place (backend/ingest.log -- three levels up: ingest/ -> searcher/ -> src/ -> backend/).
-_LOG_PATH = Path(__file__).resolve().parents[3] / "ingest.log"
 _DATASET_PATH = Path(__file__).resolve().parents[4] / "data" / "300_user_linkedin.txt"
-
-
-def _configure_file_logging() -> None:
-    """Attach a file handler pointed at backend/ingest.log, once per process."""
-    already_attached = any(
-        isinstance(handler, logging.FileHandler) and Path(handler.baseFilename) == _LOG_PATH
-        for handler in logger.handlers
-    )
-    if already_attached:
-        return
-
-    handler = logging.FileHandler(_LOG_PATH, encoding="utf-8")
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
 
 
 def _count_data_rows(path: Path) -> int:
@@ -99,7 +82,7 @@ def run_ingestion() -> None:
     rolled into the final skipped count so nothing is indexed under the
     wrong field silently.
     """
-    _configure_file_logging()
+    configure_file_logging(logger)
 
     settings = get_settings()
     client = Elasticsearch(settings.ES_HOST)

@@ -18,10 +18,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from searcher.ingest.logging_setup import LOG_PATH, configure_file_logging
 
-# backend/ingest.log -- three levels up from this file (ingest/ -> searcher/ -> src/ -> backend/).
-_LOG_PATH = Path(__file__).resolve().parents[3] / "ingest.log"
+logger = logging.getLogger(__name__)
 
 # Columns whose raw value is a Python-literal repr of a list/dict, not JSON.
 NESTED_FIELDS = frozenset(
@@ -70,21 +69,6 @@ _EXPECTED_LIST_ELEMENT_TYPE: dict[str, type] = {
     "experience": dict,
     "education": dict,
 }
-
-
-def _configure_file_logging() -> None:
-    """Attach a file handler pointed at backend/ingest.log, once per process."""
-    already_attached = any(
-        isinstance(handler, logging.FileHandler) and Path(handler.baseFilename) == _LOG_PATH
-        for handler in logger.handlers
-    )
-    if already_attached:
-        return
-
-    handler = logging.FileHandler(_LOG_PATH, encoding="utf-8")
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
 
 
 def _clean_scalar(raw_value: str) -> str | None:
@@ -158,7 +142,7 @@ def parse_profiles(path: str | Path) -> list[ProfileRecord]:
     row's columns, so the row is skipped and logged (index + reason) to
     `backend/ingest.log` rather than indexed under the wrong field names.
     """
-    _configure_file_logging()
+    configure_file_logging(logger)
 
     csv_path = Path(path)
     records: list[ProfileRecord] = []
@@ -194,4 +178,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     dataset_path = Path(__file__).resolve().parents[4] / "data" / "300_user_linkedin.txt"
     profiles = parse_profiles(dataset_path)
-    print(f"Parsed {len(profiles)} clean profile record(s). See {_LOG_PATH} for skipped rows.")
+    print(f"Parsed {len(profiles)} clean profile record(s). See {LOG_PATH} for skipped rows.")
