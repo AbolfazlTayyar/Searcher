@@ -262,3 +262,13 @@ Per CLAUDE.md's "Documentation conventions," every task below gets a `docs/task-
 > when i saerch "jose" shouldnt "joseph holland" come as result? right now nothing comes
 
 **Checkpoint:** Root cause confirmed: `multi_match`'s default `best_fields` type requires whole-token matches against the standard analyzer, so `jose` never matched the token `joseph`. Fixed by switching to `multi_match` `type: "bool_prefix"` in `search_service.py`. `uv run pytest tests/test_search.py` — all 8 existing tests still pass. Rebuilt the backend Docker image and verified live: `GET /search?q=jose` returns "joseph holland" and other "joseph"-named profiles against the real containerized stack.
+
+### Task 27 — Anchor checks for `summary`/`skills` column-shift leaks
+
+**Do:** Extend `parse.py`'s per-field anchor validation to catch two more same-length column-shift symptoms: a numeric field landing in `summary` as a bare number, and `phone_numbers` landing in `skills` (a shape the existing list-of-strings type check can't distinguish from real skills). Update the malformed-row statistics in `CLAUDE.md` and `README.md` to match.
+
+**Prompt:** *(inferred — no session transcript captured for this task; see `docs/task-27-summary-skills-anchor-checks/description.md`)*
+
+> The anchor checks from the earlier ingestion fix caught shifted `job_title`/`industry`/URL/`gender` values, but two more leaks are getting through: a numeric field (connections count or years-of-experience) landing in `summary` as a bare number, and `phone_numbers` landing in `skills` — which still parses as a valid list-of-strings, so the existing type check doesn't reject it. Add anchor checks for `summary` and `skills` to catch these, and update the malformed-row statistics in CLAUDE.md and the README to match the corrected counts.
+
+**Checkpoint:** `uv run pytest` — 17/17 tests pass (including 2 new regression tests for the `summary`/`skills` anchor checks), `ruff check`/`ruff format --check`/`mypy` all clean. Malformed/clean-row statistics in `CLAUDE.md` and `README.md` updated to 271/336 malformed (53 length-mismatch, 218 same-length shift, 34 duplicates), 31/336 clean.
