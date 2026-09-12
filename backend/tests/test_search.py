@@ -81,3 +81,19 @@ async def test_query_with_no_matches_returns_empty_results(client: AsyncClient) 
     body = response.json()
     assert body["total"] == 0
     assert body["results"] == []
+
+
+async def test_page_past_es_result_window_returns_empty_results_not_an_error(
+    client: AsyncClient,
+) -> None:
+    """A page number whose `from + size` exceeds ES's 10,000 result-window limit
+    is still a valid (if pointless) request -- it should degrade to an empty
+    page with the real `total`, not a raw ES error."""
+    response = await client.get("/search", params={"page": 501, "page_size": 20})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"] == []
+    assert body["total"] == 4
+    assert body["page"] == 501
+    assert body["page_size"] == 20

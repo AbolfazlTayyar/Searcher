@@ -35,6 +35,13 @@ _SUGGEST_FIELD_PATHS: dict[str, str] = {
 # total), so the aggregation captures every value before Python filters it.
 _SUGGEST_AGG_SIZE = 1000
 
+# Elasticsearch's default `index.max_result_window` -- a `from`/`size` search
+# rejects any request where `from + size` exceeds this. A page number far
+# past the real result set (e.g. a client guessing at `page`) would otherwise
+# surface as a raw ES `search_phase_execution_exception` instead of the
+# empty-but-valid page it actually is.
+_MAX_RESULT_WINDOW = 10_000
+
 
 class SearchQueryError(Exception):
     """Raised when the search query cannot be built or executed against Elasticsearch.
@@ -114,14 +121,27 @@ async def search_profiles(
     with ~336 documents total, deep pagination's cost never becomes a
     concern, and offset pagination is simpler for the frontend to drive from
     a page number.
+
+    A `page`/`page_size` combination past Elasticsearch's `from + size`
+    result-window limit is treated as a valid page with no results, rather
+    than surfacing ES's rejection to the caller -- `total` still reflects the
+    real count via a separate `count` call, since that request has no window
+    limit of its own.
     """
     query = _build_query(q, job_title, skill)
+    from_ = (page - 1) * page_size
 
     try:
+        if from_ + page_size > _MAX_RESULT_WINDOW:
+            count_response = await client.count(index=index_name, query=query)
+            return SearchResponse(
+                results=[], total=count_response["count"], page=page, page_size=page_size
+            )
+
         response = await client.search(
             index=index_name,
             query=query,
-            from_=(page - 1) * page_size,
+            from_=from_,
             size=page_size,
         )
     except (ApiError, TransportError) as exc:
