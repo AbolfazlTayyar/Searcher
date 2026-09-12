@@ -35,6 +35,21 @@ services:
       timeout: 5s
       retries: 10
 
+  ingest:
+    build:
+      context: ./backend
+    container_name: searcher-ingest
+    environment:
+      - ES_HOST=http://elasticsearch:9200
+      - ES_INDEX_NAME=linkedin_profiles
+    volumes:
+      - ./data:/app/data:ro
+    command: ["python", "-m", "searcher.ingest.ingest"]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -46,14 +61,14 @@ services:
       - ES_INDEX_NAME=linkedin_profiles
       - CORS_ORIGINS=["http://localhost:4173"]
     volumes:
-      # Read-only: the dataset is write-once, indexed via the one-off
-      # `docker compose run --rm backend python -m searcher.ingest.ingest` command.
       - ./data:/app/data:ro
     ports:
       - "8000:8000"
     depends_on:
       elasticsearch:
         condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -s -f http://localhost:8000/health || exit 1"]
       interval: 10s

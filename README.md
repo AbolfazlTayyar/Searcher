@@ -5,15 +5,14 @@
 ## نحوه اجرا
 
 ```bash
-docker compose up --build -d                                        # اجرای Elasticsearch، بک‌اند و فرانت‌اند
-docker compose run --rm backend python -m searcher.ingest.ingest     # یک‌بار: ایندکس‌کردن دیتاست
+docker compose up --build -d   # اجرای Elasticsearch، ایندکس‌کردن خودکار دیتاست، سپس بک‌اند و فرانت‌اند
 ```
 
 - فرانت‌اند: http://localhost:4173
 - API بک‌اند: http://localhost:8000
 - Elasticsearch: http://localhost:9200
 
-دستور ایندکس‌کردن هر بار ایندکس را از نو می‌سازد، پس تکرارش بی‌خطر است. نیازی به نصب محلی `uv`/`npm` نیست. پیکربندی از طریق متغیرهای محیطی است (`.env.example` در ریشهٔ ریپو).
+ایندکس‌کردن به‌صورت یک سرویس جدا (`ingest`) در `docker-compose.yml` خودکار اجراست و بک‌اند تا پایان موفق آن منتظر می‌ماند. برای ایندکس‌کردن دوباره (مثلاً پس از تغییر دیتاست)، کافی‌ست `docker compose up --build ingest` را اجرا کنید — هر بار ایندکس را از نو می‌سازد، پس تکرارش بی‌خطر است. نیازی به نصب محلی `uv`/`npm` نیست. پیکربندی از طریق متغیرهای محیطی است (`.env.example` در ریشهٔ ریپو).
 
 ## معماری
 

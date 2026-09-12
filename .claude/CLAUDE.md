@@ -112,7 +112,7 @@ The full app — Elasticsearch, backend, and frontend — runs via a single `doc
 - `backend/Dockerfile`: multi-stage build using `uv` (install deps in a builder stage, copy the synced venv into a slim runtime stage). Runs `uvicorn` as the container entrypoint.
 - `frontend/Dockerfile`: multi-stage build — `npm run build` in a Node build stage, serve the static output from a lightweight server (e.g. `nginx`) in the final stage. Not `npm run dev` in production/Docker.
 - `docker-compose.yml` wires all three services together with proper `depends_on`/healthchecks (backend waits for ES to be ready), a shared network, and env vars (`ES_HOST` pointing at the ES service name, not `localhost`, `VITE_API_BASE_URL` pointing at the backend service).
-- Ingestion (`ingest.py`) runs as a one-off job — either a separate compose service with `restart: "no"` that runs once and exits, or documented as a single `docker compose run backend uv run python -m searcher.ingest.ingest` command. Either way, `docker compose up --build` alone (plus that one ingestion command, if not automated) should bring the whole app up with no other tooling installed locally.
+- Ingestion (`ingest.py`) runs as a dedicated `ingest` compose service with `restart: "no"` — it depends on Elasticsearch being healthy, runs once, and the `backend` service depends on it completing successfully (`service_completed_successfully`) before starting. `docker compose up --build` alone brings up the whole app, dataset included, with no other tooling installed locally and no separate ingestion command required. Re-running `docker compose up --build` (or `docker compose run --rm ingest`) re-ingests via the same drop-and-recreate — safe to repeat.
 
 ## UI/design conventions
 
@@ -125,13 +125,12 @@ Prefer self-explanatory code (clear names, small functions) over comments explai
 ## How to run
 
 ```bash
-docker compose up --build -d                                        # starts Elasticsearch, backend, frontend
-docker compose run --rm backend python -m searcher.ingest.ingest     # one-time: index the dataset
+docker compose up --build -d   # starts Elasticsearch, runs ingestion once, then starts backend + frontend
 ```
 
 Frontend: http://localhost:4173 · Backend API: http://localhost:8000 · Elasticsearch: http://localhost:9200
 
-Re-run the ingestion command any time to refresh the index (it's a full drop-and-recreate, safe to repeat — see `ingest.py`'s docstring). No local `uv`/`npm` installation is required; both Dockerfiles are self-contained multi-stage builds.
+To refresh the index later (it's a full drop-and-recreate, safe to repeat — see `ingest.py`'s docstring), run `docker compose up --build ingest` (or `docker compose run --rm ingest`). No local `uv`/`npm` installation is required; both Dockerfiles are self-contained multi-stage builds.
 
 (Local-only commands, e.g. for running tests outside Docker, are documented separately in each service's own notes — not required for running the app itself.)
 
