@@ -44,7 +44,11 @@ def _build_query(q: str | None, job_title: str | None, skill: str | None) -> dic
     """
     must: list[dict[str, Any]] = []
     if q:
-        must.append({"multi_match": {"query": q, "fields": _SEARCH_FIELDS}})
+        # `bool_prefix` treats the last (or only) term as a prefix match --
+        # without it, a plain `multi_match` requires whole-token matches, so
+        # typing "jose" would never surface "Joseph Holland" until the full
+        # name was typed.
+        must.append({"multi_match": {"query": q, "fields": _SEARCH_FIELDS, "type": "bool_prefix"}})
     else:
         must.append({"match_all": {}})
 

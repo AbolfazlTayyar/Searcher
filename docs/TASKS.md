@@ -254,3 +254,11 @@ Per CLAUDE.md's "Documentation conventions," every task below gets a `docs/task-
 > test the search based on case sensibity or insensivity ity should work both ways i think
 
 **Checkpoint:** Live-tested against the running Docker stack: `q=training`/`Training`/`TRAINING` all return identical results (confirms `q` was already case-insensitive). `job_title=recruiting manager` vs `Recruiting Manager` vs `RECRUITING MANAGER` all returned the same match after the fix (previously only the exact-cased value matched); non-matching filter values still correctly return zero results. Added `case_insensitive: true` to both `term` filter clauses in `search_service.py`. Added 3 regression tests (`test_keyword_search_is_case_insensitive`, `test_job_title_filter_is_case_insensitive`, `test_skill_filter_is_case_insensitive`) to `backend/tests/test_search.py`; full suite (15 tests), `ruff check`, `ruff format --check`, and `mypy` all pass.
+
+### Task 26 — Prefix search / partial name match fix
+**Do:** Fix `q` keyword search so a partial word (e.g. "jose") matches profiles whose full-name/summary/skills token starts with it (e.g. "joseph holland"), instead of requiring a whole-token match.
+
+**Prompt:**
+> when i saerch "jose" shouldnt "joseph holland" come as result? right now nothing comes
+
+**Checkpoint:** Root cause confirmed: `multi_match`'s default `best_fields` type requires whole-token matches against the standard analyzer, so `jose` never matched the token `joseph`. Fixed by switching to `multi_match` `type: "bool_prefix"` in `search_service.py`. `uv run pytest tests/test_search.py` — all 8 existing tests still pass. Rebuilt the backend Docker image and verified live: `GET /search?q=jose` returns "joseph holland" and other "joseph"-named profiles against the real containerized stack.
