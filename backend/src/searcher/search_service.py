@@ -9,7 +9,7 @@ ES query lives here in one place.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from elasticsearch import ApiError, AsyncElasticsearch, TransportError
 
@@ -21,6 +21,19 @@ logger = logging.getLogger(__name__)
 # fields declared in `ingest/mapping.py`. Weighted so a hit on the name
 # ranks above the same keyword merely appearing in the free-text summary.
 _SEARCH_FIELDS = ["full_name^3", "summary", "skills"]
+
+# Maps the public `/suggest` field name to the `.keyword` sub-field it
+# aggregates over -- kept separate from the filter field names in
+# `_build_query` since `skill` (singular, user-facing) maps to `skills`
+# (plural, the indexed field).
+_SUGGEST_FIELD_PATHS: dict[str, str] = {
+    "job_title": "job_title.keyword",
+    "skill": "skills.keyword",
+}
+
+# Comfortably above this dataset's real distinct-value count (~336 profiles
+# total), so the aggregation captures every value before Python filters it.
+_SUGGEST_AGG_SIZE = 1000
 
 
 class SearchQueryError(Exception):
@@ -124,3 +137,60 @@ async def search_profiles(
         page=page,
         page_size=page_size,
     )
+
+
+async def suggest_values(
+    client: AsyncElasticsearch,
+    index_name: str,
+    *,
+    field: Literal["job_title", "skill"],
+    prefix: str,
+    limit: int,
+) -> list[str]:
+    """Return up to `limit` exact `.keyword` values for `field` starting with `prefix`.
+
+    Exists so a UI can steer a user toward a value that will actually match
+    `job_title`/`skill`'s exact-match `term` filters in `_build_query` --
+    typing "manager" alone returns 0 results against a title like "recruiting
+    manager" by design, and this endpoint is the discovery path for that.
+
+    A `terms` aggregation pulls every distinct value (bounded by
+    `_SUGGEST_AGG_SIZE`, comfortably above this dataset's real cardinality),
+    filtered in Python against any *word* in the value starting with
+    `prefix` (case-insensitive) -- e.g. prefix "manager" must surface
+    "recruiting manager", not just values whose first word is "manager", or
+    the suggester wouldn't actually solve the UX gap it exists for. This
+    also sidesteps Elasticsearch 8.x's `include` regex, which only accepts a
+    plain (case-sensitive) pattern and can't express "case-insensitive,
+    matches any word" directly. A `completion` suggester was skipped as
+    overkill -- the mapping has no dedicated suggester field, and at ~336
+    documents this aggregate-then-filter approach is simple and fast enough.
+    """
+    field_path = _SUGGEST_FIELD_PATHS[field]
+    prefix_lower = prefix.lower()
+
+    try:
+        response = await client.search(
+            index=index_name,
+            size=0,
+            aggs={
+                "values": {
+                    "terms": {
+                        "field": field_path,
+                        "order": {"_count": "desc"},
+                        "size": _SUGGEST_AGG_SIZE,
+                    }
+                }
+            },
+        )
+    except (ApiError, TransportError) as exc:
+        logger.error("Elasticsearch suggest aggregation failed: %s", exc)
+        raise SearchQueryError("Suggest query failed") from exc
+
+    buckets = response["aggregations"]["values"]["buckets"]
+    matches = [
+        bucket["key"]
+        for bucket in buckets
+        if any(word.startswith(prefix_lower) for word in bucket["key"].lower().split())
+    ]
+    return matches[:limit]

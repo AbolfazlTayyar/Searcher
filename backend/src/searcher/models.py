@@ -36,3 +36,9 @@ class SearchResponse(BaseModel):
     total: int = Field(ge=0, description="Total number of matching profiles")
     page: int = Field(ge=1, description="Current page number, 1-indexed")
     page_size: int = Field(ge=1, description="Number of results per page")
+
+
+class SuggestResponse(BaseModel):
+    """Envelope returned by `GET /suggest` -- exact values a filter would accept."""
+
+    values: list[str] = Field(description="Matching field values, most frequent first")

@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 
 from searcher.config import get_settings
 from searcher.routes.search import router as search_router
+from searcher.routes.suggest import router as suggest_router
 from searcher.search_service import SearchQueryError
 
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +55,7 @@ async def search_query_error_handler(request: Request, exc: SearchQueryError) ->
 
 
 app.include_router(search_router)
+app.include_router(suggest_router)
 
 
 @app.get("/health")
