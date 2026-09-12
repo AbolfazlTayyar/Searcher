@@ -5,14 +5,16 @@
  */
 
 import type { ProfileResult, SearchResponse } from '../api/types';
+import Pagination from './Pagination';
 
 interface ResultsListProps {
   data: SearchResponse | undefined;
   isLoading: boolean;
   isError: boolean;
+  onPageChange: (page: number) => void;
 }
 
-export default function ResultsList({ data, isLoading, isError }: ResultsListProps) {
+export default function ResultsList({ data, isLoading, isError, onPageChange }: ResultsListProps) {
   if (isLoading) {
     return <p className="results__status">Loading results...</p>;
   }
@@ -39,6 +41,12 @@ export default function ResultsList({ data, isLoading, isError }: ResultsListPro
           <ProfileCard key={index} profile={profile} />
         ))}
       </ul>
+      <Pagination
+        page={data.page}
+        pageSize={data.page_size}
+        total={data.total}
+        onPageChange={onPageChange}
+      />
     </div>
   );
 }
