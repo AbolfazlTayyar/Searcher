@@ -15,8 +15,10 @@ length check looking clean while `facebook_url` holds an industry name and
 So beyond the length check, every row is checked against a handful of
 "anchor" fields whose shape is well known regardless of position --
 platform URLs contain their own domain, `gender` is one of a small enum,
-`job_title`/`industry` are never a Python-literal repr or a bare phone
-number -- and a row that fails any of them is treated as shifted and
+`job_title`/`industry`/`summary` are never a Python-literal repr or a bare
+phone number, `summary` is never a bare int/float either, and `skills`
+(a valid list-of-strings literal either way) is never a list of phone
+numbers -- and a row that fails any of them is treated as shifted and
 skipped in full, the same as a length mismatch, rather than trusting the
 rest of its fields.
 """
@@ -40,6 +42,11 @@ logger = logging.getLogger(__name__)
 # `industry`. Free-text industry/job-title values never look like this.
 _PHONE_LIKE_RE = re.compile(r"^\+?[0-9][0-9\-\s().]{5,}$")
 
+# Matches a bare int/float (e.g. "1646.0"): a shifted-column symptom seen
+# where a numeric field (`linkedin_connections`, `inferred_years_experience`)
+# lands in `summary`. A genuine free-text summary is never just a number.
+_BARE_NUMBER_RE = re.compile(r"^-?\d+(\.\d+)?$")
+
 
 def _looks_like_python_literal(value: str) -> bool:
     """True for a stray `"['a', 'b']"` / `"{...}"` repr landing in a scalar field."""
@@ -49,6 +56,31 @@ def _looks_like_python_literal(value: str) -> bool:
 def _is_plausible_free_text(value: str) -> bool:
     """False if `value` looks like it belongs to a different (structured) column."""
     return not (_looks_like_python_literal(value) or _PHONE_LIKE_RE.match(value))
+
+
+def _is_plausible_summary(value: str) -> bool:
+    """False if `summary` looks like a shifted-in number or structured-field repr."""
+    return not (_looks_like_python_literal(value) or _BARE_NUMBER_RE.match(value))
+
+
+def _is_plausible_skills(value: str) -> bool:
+    """False if the `skills` literal is really a shifted-in `phone_numbers` list.
+
+    A row can shift by a fixed number of columns without changing its total
+    field count (see module docstring), landing `phone_numbers` squarely in
+    `skills` -- a valid list-of-strings literal, so `_parse_nested`'s type
+    check accepts it. Real skills are never phone-number strings, so this
+    catches what the type check alone misses.
+    """
+    try:
+        parsed = ast.literal_eval(value)
+    except (ValueError, SyntaxError):
+        return True
+    if not isinstance(parsed, list):
+        return True
+    return not any(
+        isinstance(element, str) and _PHONE_LIKE_RE.match(element.strip()) for element in parsed
+    )
 
 
 # Column -> predicate(value) -> True if the value's shape is plausible for
@@ -66,6 +98,8 @@ _ANCHOR_CHECKS: dict[str, Callable[[str], bool]] = {
     "gender": lambda v: not v or v in {"male", "female"},
     "job_title": lambda v: not v or _is_plausible_free_text(v),
     "industry": lambda v: not v or _is_plausible_free_text(v),
+    "summary": lambda v: not v or _is_plausible_summary(v),
+    "skills": lambda v: not v or _is_plausible_skills(v),
 }
 
 
