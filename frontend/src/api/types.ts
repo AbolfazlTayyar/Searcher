@@ -21,3 +21,7 @@ export interface SearchResponse {
   page: number;
   page_size: number;
 }
+
+export interface SuggestResponse {
+  values: string[];
+}
