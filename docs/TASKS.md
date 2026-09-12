@@ -294,3 +294,14 @@ Per CLAUDE.md's "Documentation conventions," every task below gets a `docs/task-
 > [after the audit surfaced the missing pagination UI and the ES result-window bug] yes, fix both
 
 **Checkpoint:** `uv run pytest` — 10/10 backend search tests pass (1 new: `test_page_past_es_result_window_returns_empty_results_not_an_error`), `ruff check`/`ruff format --check`/`mypy` all clean. `npx vitest run` — 15/15 frontend tests pass (3 new for `Pagination.tsx`, 2 updated in `ResultsList.test.tsx`), `tsc --noEmit`/`eslint` clean. Live-tested against the rebuilt Docker stack: `GET /search?page=999` and `GET /search?page=501&page_size=20` now return `200` with empty results and the correct `total` instead of `502`; in the browser, Next/Previous correctly page through the 31-result unfiltered set, and changing the skill filter while on page 2 resets to page 1.
+
+### Task 30 — Automate ingestion as a compose service
+
+**Do:** Replace the manual `docker compose run --rm backend python -m searcher.ingest.ingest` step with a dedicated `ingest` compose service that runs automatically as part of `docker compose up --build`, gated on Elasticsearch health, with `backend` waiting on its successful completion.
+
+**Prompt:**
+> shouldnt this docker compose run --rm backend python -m searcher.ingest.ingest handle in code automaticaly? whats the best practice here
+>
+> [after discussing the manual-command vs. startup-hook vs. dedicated-service tradeoffs] automate it as a separate compose service
+
+**Checkpoint:** `docker compose up --build -d` from a clean state: `ingest` starts only after `elasticsearch` is healthy, exits 0 after logging "Ingestion complete: 31 indexed, 305 skipped (of 336 total rows)", and `backend` starts only after that. `curl localhost:9200/linkedin_profiles/_count` returns 31; `GET /health` and `GET /search` work end-to-end with no separate ingestion command run. `.claude/CLAUDE.md` and `README.md` updated to document the automated flow.
