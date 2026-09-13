@@ -14,7 +14,7 @@ Evaluation priorities: clean API design, correct search/filter logic, simplicity
 - **Dependency management:** `uv` (Astral) for the backend — fast, single lockfile (`uv.lock`), replaces pip/venv/poetry juggling. Use `uv run`, `uv sync`, `uv add <package>`.
 - **Infra:** `docker-compose.yml` at repo root running Elasticsearch (and optionally Kibana for local inspection). Elasticsearch data must persist across restarts — mount a named volume for `/usr/share/elasticsearch/data`.
 
-## Repo structure (root: `E:\Searcher`)
+## Repo structure
 
 ```
 Searcher/
